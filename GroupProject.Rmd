@@ -1,0 +1,743 @@
+---
+title: "Liver Project"
+author: "Aicha Malouche"
+date: "2024-12-19"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Exploration
+
+## 1.1 Load all of the necessary packages
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+library(readxl)
+library(Amelia) # Load the Amelia package for handling missing data
+library(naniar) # Load the naniar package to visualize missing data
+#install.packages("summarytools", repos = "http://cran.us.r-project.org")
+library(summarytools)
+
+
+library(missMDA) # Load the missMDA library for handling missing data using multivariate methods
+
+library(dplyr)       # Data manipulation
+library(tidyr)       # Data tidying
+library(ggplot2)     # Data visualization
+library(outliers)    # Outlier detection
+library(robustbase)  # Robust statistical methods
+
+library(janitor) # Load the janitor library for data cleaning functions
+
+```
+
+## 1.2 Read The dataset
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+data <- read_excel("liver_data_with_metadata.xlsx")
+
+# View the first few rows of the dataset
+head(data)
+
+
+```
+
+## 1.3 Check the size of the dataset
+
+### Display the number of rows and columns in the dataset
+```{r echo=TRUE, message=F, warning=F}
+dim(data) 
+
+```
+
+### Display the number of rows
+```{r echo=TRUE, message=F, warning=F}
+nrow(data) 
+
+```
+
+### Display the number of columns
+```{r echo=TRUE, message=F, warning=F}
+
+ncol(data) 
+```
+
+## 1.4 Overview of the Variables 
+
+### Display the column names of the dataset
+
+```{r echo=TRUE, message=F, warning=F}
+colnames(data) 
+```
+
+### Display a summary of the dataset structure
+
+```{r echo=TRUE, message=F, warning=F}
+str(data) 
+
+```
+
+## 1.5 Display a summary of the dataset 
+
+```{r echo=TRUE, message=F, warning=F}
+# gives basic statistics for numeric columns and a summary of factor levels
+summary(data)
+```
+
+
+## 1.6 Create a heatmap-like visualization of missing values
+
+```{r echo=TRUE, message=F, warning=F}
+missmap(data)
+```
+
+## 1.7 Create another visual representation of missingness in the dataset
+```{r echo=TRUE, message=F, warning=F}
+vis_miss(data)
+
+```
+
+
+## 1.8 Generate a detailed summary of the dataset, including statistics and data structure
+
+```{r echo=TRUE, message=F, warning=F}
+# Ensure summarytools is loaded
+library(summarytools)
+# Disable interactive view mode
+st_options(plain.ascii = TRUE)
+
+# Generate the summary table
+summary <- dfSummary(data)
+
+
+# Print the table in R Markdown with HTML styling
+print(summary, method = "render")
+
+
+
+```
+
+# Data Cleaning
+## 2.1 Identify numeric columns in the dataset
+```{r echo=TRUE, message=F, warning=F}
+k <- which(unlist(lapply(data, is.numeric)) == TRUE) #The lapply() function checks each column to determine if it's numeric.
+
+
+# unlist() converts the logical list result to a vector.
+# which() identifies the indices where the value is TRUE
+k # Print the indices of numeric columns for verification
+```
+
+## 2.2 Apply a logarithmic transformation to all numeric columns
+
+
+```{r echo=TRUE, message=F, warning=F}
+Xdata <- log(data[, k])
+# The log() function applies a logarithm to the selected numeric columns.
+# This transformation is often used to reduce skewness in data.
+```
+
+## 2.3 Perform Principal Component Analysis (PCA) to impute missing values
+
+```{r echo=TRUE, message=F, warning=F}
+pc <- imputePCA(Xdata)
+
+# imputePCA() imputes missing values based on the structure of the data 
+# This method uses relationships between variables to predict and fill in missing data.
+
+
+```
+
+
+## 2.4 Extract the completed dataset with imputed values
+
+```{r echo=TRUE, message=F, warning=F}
+
+Xdata <- pc$completeObs
+# pc$completeObs contains the imputed data where missing values have been replaced.
+
+```
+
+## 2.5 Revert the logarithmic transformation by applying the exponential function
+
+```{r echo=TRUE, message=F, warning=F}
+
+data[, k] <- exp(Xdata)
+
+# The exp() function reverses the natural logarithm, restoring the original scale of the data.
+
+```
+
+## 2.6 Generate a final detailed summary of the cleaned and transformed dataset
+
+```{r echo=TRUE, message=F, warning=F}
+summary <- dfSummary(data)
+
+
+print(summary, method = "render")
+
+
+
+```
+
+## 2.7 Identify rows with missing values in the "Gender of the patient" column
+
+```{r echo=TRUE, message=F, warning=F}
+
+j <- which(is.na(data$`Gender of the patient`) == TRUE)
+
+
+# is.na(data$`Gender of the patient`): Checks each value in the "Gender of the patient" column.
+# Returns TRUE for missing values (NA) and FALSE otherwise.
+# which(... == TRUE): Finds the indices (row numbers) where the value is missing (TRUE).
+# j: This variable stores the row indices of missing values for easier reference later.
+
+```
+
+
+## 2.8 Remove rows with missing values in the "Gender of the patient" column
+```{r echo=TRUE, message=F, warning=F}
+
+
+data <- data[-j,]
+
+# data[-j,]: Removes rows from the dataset where the row indices match those in `j`.
+# The minus sign (-j) tells R to exclude these rows.
+# After this step, the dataset will no longer have any rows with missing "Gender of the patient" values.
+# This step ensures that analyses requiring this column won't fail due to missing data.
+```
+
+## 2.9 Regenerate the summary table after cleaning the dataset
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+# The dataset has been cleaned by removing rows with missing values in the "Gender of the patient" column.
+# Now, we generate an updated summary of the dataset to review its current structure and statistics.
+
+summary <- dfSummary(data)
+
+print(summary, method = "render")
+
+cat("The summary table has been updated")
+```
+
+## 2.10 Outliers detection 
+
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+# Use robust Mahalanobis distance to detect multivariate outliers
+robust_dist <- covMcd(data[,-c(2,11)])  # Compute robust covariance and center for columns excluding 2 and 11 (gender and results)
+threshold <- qchisq(0.99, df = ncol(data[,-c(2,11)]))  # Chi-squared threshold for 99% confidence level
+
+```
+
+
+```{r echo=TRUE, message=F, warning=F}
+
+# Identify multivariate outliers based on robust distances
+robust_outliers <- mahalanobis(data[,-c(2,11)], robust_dist$center, robust_dist$cov) > threshold
+
+```
+
+## 2.11 Display a summary of detected robust outliers
+```{r echo=TRUE, message=F, warning=F}
+
+
+table(robust_outliers)
+
+
+```
+
+## 2.12 Remove rows identified as outliers to create a clean dataset
+
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+robust_clean_data <- data[!robust_outliers, ]
+
+
+```
+
+
+## 2.13 Display the dimensions of the cleaned dataset
+```{r echo=TRUE, message=F, warning=F}
+
+
+dim(robust_clean_data)
+
+
+```
+
+## 2.14 Generate a detailed summary of the cleaned dataset
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+
+summary <- dfSummary(robust_clean_data)
+
+print(summary, method = "render")
+```
+
+
+## 2.15 Save the cleaned dataset to a CSV file
+```{r echo=TRUE, message=F, warning=F}
+
+
+
+write.csv(robust_clean_data, file = "cleaned_data.csv", row.names = FALSE)
+# robust_clean_data: This is the cleaned data you want to save.
+# file: The name of the output CSV file. 
+# row.names = FALSE: Ensures that row numbers are not added as a separate column in the CSV file.
+
+```
+
+
+
+# Data Preprocessing (Discretization)
+
+## 3.1 Clean column names of the dataset to ensure uniform and easy-to-use format
+
+```{r echo=TRUE, message=F, warning=F}
+data<-robust_clean_data
+
+data <- data %>% clean_names()
+
+
+```
+
+## 3.2 Categorize the 'age_of_the_patient' column into age groups
+```{r echo=TRUE, message=F, warning=F}
+
+
+data$age_cat <- cut(data$age_of_the_patient,
+                    breaks = c(-Inf, 18, 40, 65, Inf), # Define the age group boundaries
+                    labels = c("Youth (<18)", "Adult (18-40)", "Middle-aged (40-65)", "Senior (>65)")) # Assign group labels
+
+
+```
+
+## 3.3 Discretize the 'total_bilirubin' variable into categories based on medical thresholds
+
+
+```{r echo=TRUE, message=F, warning=F}
+data$total_bilirubin_cat <- cut(data$total_bilirubin, 
+                                breaks = c(-Inf, 1.2, Inf), # Threshold for 'Normal' and 'Elevated'
+                                labels = c("Normal", "Elevated"))
+
+
+
+```
+
+## 3.4 Similarly, discretize 'direct_bilirubin' into 'Normal' and 'Elevated'
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+data$direct_bilirubin_cat <- cut(data$direct_bilirubin, 
+                                 breaks = c(-Inf, 0.3, Inf), 
+                                 labels = c("Normal", "Elevated"))
+
+```
+
+
+## 3.5 Categorize 'alkphos_alkaline_phosphotase' into 'Low', 'Normal', and 'High' based on specified ranges
+```{r echo=TRUE, message=F, warning=F}
+
+data$alkphos_cat <- cut(data$alkphos_alkaline_phosphotase, 
+                        breaks = c(-Inf, 44, 147, Inf), 
+                        labels = c("Low", "Normal", "High"))
+
+
+```
+
+
+## 3.6 Discretize 'sgpt_alamine_aminotransferase' as 'Normal' or 'Elevated' using a threshold
+
+```{r echo=TRUE, message=F, warning=F}
+
+data$sgpt_cat <- cut(data$sgpt_alamine_aminotransferase, 
+                     breaks = c(-Inf, 45, Inf), 
+                     labels = c("Normal", "Elevated"))
+
+
+```
+
+
+## 3.7 Discretize 'sgot_aspartate_aminotransferase' using similar logic
+
+```{r echo=TRUE, message=F, warning=F}
+
+data$sgot_cat <- cut(data$sgot_aspartate_aminotransferase, 
+                     breaks = c(-Inf, 40, Inf), 
+                     labels = c("Normal", "Elevated"))
+
+
+```
+
+## 3.7 Categorize 'total_proteins' based on ranges for 'Low', 'Normal', and 'High'
+
+```{r echo=TRUE, message=F, warning=F}
+
+data$total_protiens_cat <- cut(data$total_protiens, 
+                               breaks = c(-Inf, 6.4, 8.3, Inf), 
+                               labels = c("Low", "Normal", "High"))
+
+
+```
+
+## 3.8 Categorize 'alb_albumin' into similar categories
+
+```{r echo=TRUE, message=F, warning=F}
+
+data$alb_cat <- cut(data$alb_albumin, 
+                    breaks = c(-Inf, 3.5, 5.5, Inf), 
+                    labels = c("Low", "Normal", "High"))
+
+
+
+```
+
+## 3.9 Discretize 'a_g_ratio_albumin_and_globulin_ratio' into 'Low', 'Normal', and 'High'
+```{r echo=TRUE, message=F, warning=F}
+
+data$a_g_ratio_cat <- cut(data$a_g_ratio_albumin_and_globulin_ratio, 
+                          breaks = c(-Inf, 1.2, 2.2, Inf), 
+                          labels = c("Low", "Normal", "High"))
+
+
+```
+
+
+## 3.10 Create a new summarized data frame containing only categorized variables and Gender
+```{r echo=TRUE, message=F, warning=F}
+
+data_categorized <- data.frame(
+  Age = data$age_cat,
+  Gender = data$gender_of_the_patient,
+  Total_Bilirubin = data$total_bilirubin_cat,
+  Direct_Bilirubin = data$direct_bilirubin_cat,
+  Alkaline_Phosphatase = data$alkphos_cat,
+  Alanine_Aminotransferase = data$sgpt_cat,
+  Aspartate_Aminotransferase = data$sgot_cat,
+  Total_Proteins = data$total_protiens_cat,
+  Albumin = data$alb_cat,
+  AG_Ratio = data$a_g_ratio_cat,
+  Result = as.factor(data$result) # Convert 'Result' to a factor for categorical analysis
+)
+
+```
+
+## 3.11 Convert 'Gender' to a factor type for better handling in analysis 
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+data_categorized$Gender <- as.factor(data_categorized$Gender)
+
+```
+
+## 3.12 Drop unused levels from the factors in the data frame
+
+```{r echo=TRUE, message=F, warning=F}
+data_categorized <- droplevels(data_categorized)
+
+
+```
+
+
+## 3.13 Display a summary of the cleaned and categorized data frame 
+
+```{r echo=TRUE, message=F, warning=F}
+summary(data_categorized)
+
+```
+
+# Data Preprocessing (Dimensionality Reduction)
+
+## 4.1 Perform Principal Component Analysis (PCA) to reduce dimensionality and explore variance
+```{r echo=TRUE, message=F, warning=F}
+
+library(FactoMineR)
+library(factoextra)
+# PCA requires numeric (quantitative) variables.
+```
+
+## 4.2 Run PCA, treating columns 2 and 11 as supplementary (not used for PCA computation)
+```{r echo=TRUE, message=F, warning=F}
+library(readr)
+data <- read_csv("cleaned_data.csv")
+summary(data)
+pca_res <- PCA(data, quali.sup = c(2, 11), scale.unit = TRUE, graph = FALSE)
+# scale.unit = TRUE in PCA to standardize your variables (subtract mean and divide by standard deviation
+# (quali.sup) Some variables (like categorical ones) may not contribute to PCA but can provide additional insights. These are marked as "supplementary."
+pca_res # Show how much variance each principal component explains.
+
+```
+
+
+
+## Visualize Results
+### 4.3 Visualize the percentage of variance explained by each principal component
+
+```{r echo=TRUE, message=F, warning=F}
+
+fviz_screeplot(pca_res, addlabels = TRUE) #Visualizes the variance explained by each principal component.
+
+# (fviz_pca_var): Highlights which variables contribute most to the components.
+```
+## 4.4 Plot the variables in the PCA space to see their contributions and correlation
+```{r echo=TRUE, message=F, warning=F}
+
+fviz_pca_var(pca_res, repel = TRUE) # Variable contributions
+
+
+```
+## 4.5 Extract and display eigenvalues to understand the variance captured by each component
+
+```{r echo=TRUE, message=F, warning=F}
+
+pca_res$eig
+```
+
+
+
+
+
+# Data Preprocessing (Feature Selection) 
+
+
+
+## 5.1 Build the full logistic regression model
+```{r echo=TRUE, message=F, warning=F}
+library(readr)
+data <- read_csv("cleaned_data.csv")
+data$Result <- as.factor(data$Result)  # Convert to factor
+
+# The `glm()` function fits a generalized linear model.
+# `result ~ .` means using all predictors to predict the `result` variable.
+# `family = binomial` specifies that this is a logistic regression model.
+full_model <- glm(Result ~ ., data = data, family = binomial)
+
+```
+
+## 5.2 Perform stepwise backward elimination
+```{r echo=TRUE, message=F, warning=F}
+
+# The `step()` function eliminates predictors based on their AIC (Akaike Information Criterion) value.
+# `direction = "backward"` starts with all predictors and removes the least significant ones iteratively.
+# AIC measures the goodness of fit of the model; lower values indicate better models.
+stepwise_model <- step(full_model, direction = "backward")
+```
+
+
+## 5.3 Summarize the selected model
+
+```{r echo=TRUE, message=F, warning=F}
+
+# `summary()` provides the coefficients of the selected model and their statistical significance.
+# Look at the `Pr(>|z|)` column to see which predictors are significant:
+# Values < 0.05 indicate statistically significant predictors.
+# The model's residual deviance and AIC are also useful for assessing overall fit.
+summary(stepwise_model)
+
+```
+
+
+
+
+# Data Mining 
+## Build a logistic regression model
+
+
+```{r echo=TRUE, message=F, warning=F}
+library(readr)
+data <- read_csv("cleaned_data.csv")
+data$Result <- as.factor(data$Result)
+set.seed(123)
+# Uses all variables in dataset to predict 'result'
+model <- glm(Result ~ ., data = data, family = binomial)
+```
+
+
+### 6.1 Generate predictions based on the fitted model using 0.5 threshold
+
+```{r echo=TRUE, message=F, warning=F}
+
+initial_probs <- fitted(model) # fitted(model) gets probability predictions
+initial_preds <- ifelse(initial_probs > 0.5, 2, 1) #  ifelse() converts probabilities to class labels (1 or 2)
+
+
+
+```
+
+
+### 6.2 Create initial confusion matrix
+
+```{r echo=TRUE, message=F, warning=F}
+
+print("Confusion Matrix with 0.5 threshold:")
+initial_conf_matrix <- table(initial_preds, data$Result) # table() compares predicted vs actual classes
+# Shows how many predictions were correct/incorrect
+print(initial_conf_matrix)
+
+
+```
+
+
+### 6.3 ROC curve analysis
+
+
+```{r echo=TRUE, message=F, warning=F}
+
+library(pROC) # Load the `pROC` package to compute and visualize the ROC curve.
+# Creates ROC curve comparing true vs false positive rates
+# Higher AUC (Area Under Curve) means better model
+roc_obj <- roc(data$Result, initial_probs)
+plot(roc_obj, col = "blue", lwd = 2, 
+     main = paste("ROC Curve (AUC =", round(auc(roc_obj), 3), ")"))
+```
+
+### 6.4 Find optimal threshold
+```{r echo=TRUE, message=F, warning=F}
+
+
+# coords() finds threshold that best balances sensitivity/specificity
+# "best" method uses Youden's index
+best_threshold <- coords(roc_obj, "best", ret = "threshold", 
+                        best.method = "youden")
+print(paste("Best threshold:", round(best_threshold, 3)))
+
+```
+
+### 6.5 Make new predictions using optimal threshold
+
+```{r echo=TRUE, message=F, warning=F}
+
+
+initial_probs <- fitted(model) # fitted(model) gets probability predictions from the logistic regression model
+best_threshold <- best_threshold[1,1] #best_threshold is a matrix containing the optimal threshold determined earlier, likely from an ROC curve analysis.
+optimized_preds <- ifelse(initial_probs > best_threshold, 2, 1)
+```
+
+
+### 6.6 Create new confusion matrix with optimal threshold
+```{r echo=TRUE, message=F, warning=F}
+
+
+print("Confusion Matrix with optimal threshold:")
+optimized_conf_matrix <- table(optimized_preds, data$Result)
+print(optimized_conf_matrix)
+```
+
+
+
+## Build a Decision Trees model
+```{r echo=TRUE, message=F, warning=F}
+# `rpart` is a library used for recursive partitioning like building decision trees.
+library(rpart)
+library(readr)
+data <- read_csv("cleaned_data.csv")
+data$Result <- as.factor(data$Result)
+model <- rpart(Result ~ ., data = data, method = "class")
+
+# `result ~ .` means using all predictors in the dataset to predict the `result` variable.
+# `data = data` specifies the dataset.
+# `method = "class"` indicates that this is a classification tree.
+
+```
+
+
+### 7.1 Visualize the decision tree
+```{r echo=TRUE, message=F, warning=F}
+# `rpart.plot` is a library used for plotting decision trees in an interpretable manner.
+library(rpart.plot)
+# rpart.plot(model) creates a visual representation of the decision tree.
+#   This plot shows how the data is split based on different predictors at each node.
+#  Leaf nodes represent the final predictions
+rpart.plot(model)
+```
+
+### 7.2 Make predictions using the decision tree model
+```{r echo=TRUE, message=F, warning=F}
+# `predict()` generates predictions for the `result` variable based on the model.
+#  `newdata = data` specifies that predictions are being made on the same dataset used to train the model.
+# `type = "class"` returns the predicted class labels.
+predictions <- predict(model, newdata = data, type = "class")
+
+```
+
+### 7.3 Evaluate the decision tree model
+```{r echo=TRUE, message=F, warning=F}
+
+# Load the `caret` library, which provides tools for model evaluation.
+library(caret)
+
+#  Compare actual (`data$result`) and predicted (`predictions`) classes.
+#  `confusionMatrix()` computes metrics like accuracy, precision, recall, and F1 score.
+confusionMatrix <- confusionMatrix(as.factor(predictions), as.factor(data$Result))
+print(confusionMatrix)
+```
+
+### 7.4 Build a logistic regression model for comparison
+```{r echo=TRUE, message=F, warning=F}
+# `glm()` fits a logistic regression model with `result` as the outcome and all other predictors as inputs.
+# `family = binomial` specifies that this is a logistic regression for binary outcomes.
+library(readr)
+data <- read_csv("cleaned_data.csv")
+data$Result <- as.factor(data$Result)
+set.seed(123)
+model1 <- glm(Result ~ ., data = data, family = binomial)
+
+```
+
+### 7.5 Generate predictions from the logistic regression model
+```{r echo=TRUE, message=F, warning=F}
+# `predict()` returns predicted probabilities for each observation.
+# `type = "response"` specifies that probabilities (not log-odds) are returned.
+predictions1 <- predict(model1, newdata = data, type = "response")
+
+
+```
+
+### 7.6 Convert probabilities to class labels
+```{r echo=TRUE, message=F, warning=F}
+# A threshold of 0.5 is used for classification:
+# If the predicted probability is greater than 0.5, classify as "2" (positive class).
+# Otherwise, classify as "1" (negative class).
+# Ensure the predicted classes align with the actual levels of `data$result`.
+predicted_classes1 <- ifelse(predictions1 > 0.5, "2", "1")
+
+```
+
+
+
+### 7.7 Convert probabilities to class labels
+
+
+```{r echo=TRUE, message=F, warning=F}
+# Compare the predicted class labels with the actual class labels.
+# `positive = "1"` specifies that the positive class is labeled as "1".
+# Ensure data$result is a factor
+data$result <- as.factor(data$Result)
+
+# Check and align levels for both variables
+levels(predicted_classes1) <- levels(data$result)
+
+# Compute the confusion matrix
+confusionMatrix1 <- confusionMatrix(as.factor(predicted_classes1), as.factor(data$result), positive = "1")
+
+# Print the confusion matrix
+print(confusionMatrix1)
+
+
+```
